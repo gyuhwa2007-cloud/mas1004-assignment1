@@ -7,7 +7,11 @@ that the model can eat.
 Run `pytest tests/test_data.py` after you fill them in.
 """
 
+from pathlib import Path
+
 import numpy as np
+from PIL import Image
+from torchvision import transforms
 
 # Files with any other extension should be ignored.
 IMAGE_SUFFIXES = {".jpg", ".jpeg", ".png", ".bmp", ".webp"}
@@ -20,6 +24,16 @@ RESIZE = 256                    # the shorter side is resized to this
 CROP = 224                      # then the square in the middle is cut out
 MEAN = (0.485, 0.456, 0.406)    # red, green, blue
 STD = (0.229, 0.224, 0.225)     # red, green, blue
+
+# torchvision's Resize keeps the shape (shorter side to RESIZE), CenterCrop cuts
+# the middle square, ToTensor scales to 0..1 and puts the channels first, and
+# Normalize subtracts MEAN and divides by STD. That is steps 2 to 6 below.
+_PREPARE = transforms.Compose([
+    transforms.Resize(RESIZE),
+    transforms.CenterCrop(CROP),
+    transforms.ToTensor(),
+    transforms.Normalize(MEAN, STD),
+])
 
 
 def prepare_image(image):
@@ -50,7 +64,9 @@ def prepare_image(image):
     The web page does these same six steps in JavaScript. If your version is
     different, the self test badge at the top of your page turns red.
     """
-    raise NotImplementedError("Problem 2: fill in prepare_image")
+    image = image.convert("RGB")            # step 1
+    tensor = _PREPARE(image)                # steps 2 to 6
+    return tensor.numpy().astype(np.float32)
 
 
 def load_folder(root):
@@ -83,7 +99,34 @@ def load_folder(root):
     Memory: every image becomes 3 x 224 x 224 numbers of 4 bytes, about 0.6 MB.
     750 images is about 450 MB. That fits on Colab and on most laptops.
     """
-    raise NotImplementedError("Problem 2: fill in load_folder")
+    root = Path(root)
+    class_names = sorted(p.name for p in root.iterdir() if p.is_dir())
+
+    rows, labels, paths = [], [], []
+    for label, name in enumerate(class_names):
+        # Sorted so that the order is the same on every run and on every
+        # computer, and only real image extensions, in any letter case.
+        files = sorted(
+            p for p in (root / name).iterdir()
+            if p.is_file() and p.suffix.lower() in IMAGE_SUFFIXES
+        )
+        for path in files:
+            try:
+                with Image.open(path) as image:
+                    row = prepare_image(image)
+            except Exception:
+                # A broken or unreadable file is skipped, not fatal.
+                continue
+            rows.append(row)
+            labels.append(label)
+            paths.append(path)
+
+    if rows:
+        X = np.stack(rows).astype(np.float32)
+    else:
+        X = np.empty((0, 3, CROP, CROP), dtype=np.float32)
+    y = np.asarray(labels, dtype=np.int64)
+    return X, y, class_names, paths
 
 
 def split_train_test(X, y, paths, test_ratio=0.2, seed=0):
@@ -102,4 +145,29 @@ def split_train_test(X, y, paths, test_ratio=0.2, seed=0):
         up with a class that has no test images at all, and then your accuracy
         number means nothing.
     """
-    raise NotImplementedError("Problem 2: fill in split_train_test")
+    rng = np.random.default_rng(seed)
+    y = np.asarray(y)
+
+    train_index, test_index = [], []
+    # Split inside each class separately, so that every class lands on both
+    # sides even when the classes are not the same size.
+    for label in np.unique(y):
+        index = np.where(y == label)[0]
+        index = rng.permutation(index)          # repeatable: same seed, same split
+        n_test = int(round(len(index) * test_ratio))
+        # Keep at least one image of the class for training and, when there is
+        # room, at least one for testing.
+        n_test = max(0, min(n_test, len(index) - 1))
+        test_index.append(index[:n_test])
+        train_index.append(index[n_test:])
+
+    train_index = np.concatenate(train_index)
+    test_index = np.concatenate(test_index)
+
+    paths_train = [paths[i] for i in train_index]
+    paths_test = [paths[i] for i in test_index]
+
+    return (
+        X[train_index], y[train_index], paths_train,
+        X[test_index], y[test_index], paths_test,
+    )
