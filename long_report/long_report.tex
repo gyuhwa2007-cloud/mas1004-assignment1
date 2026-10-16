@@ -17,149 +17,705 @@
 \usepackage{mas1004}
 
 \reporttitle{Assignment 1: Long report}
-\studentname{Your name}
-\studentid{Your student ID}
+\studentname{김규화}
+\studentid{20261167}
 
 \begin{document}
 \makeheader
+
+% The pictures in figures/ and the numbers in this text were printed by the
+% commands whose output is in outputs/, and by src/report_assets.py, which
+% only copies and composes pictures and measures the saved models again.
 
 % ---------------------------------------------------------------------------
 \section*{Problem 1. Categories and images}
 
 \subsection*{Why these categories}
-\fillin{Why these categories, and why you care about them.}
+
+Five kinds of cymbal from a drum kit: \texttt{crash\_cymbal},
+\texttt{ride\_cymbal}, \texttt{hihat\_cymbal}, \texttt{splash\_cymbal} and
+\texttt{china\_cymbal}. I am the drummer in my university band, so drums are
+what I know best and what I am happy to look at for a week. The assignment asks
+for categories that are hard to tell apart, and cymbals are: five round metal
+plates that are separated by their size, by how far the edge is turned up or
+down, by the bell in the middle, and by what is printed on the metal. The five I
+chose are the five I actually play.
 
 \subsection*{What I expected the model to use}
-\fillin{What you thought, before training, the model would use to tell them
-apart: shape, colour, texture, background, or something else.}
+
+Before training I expected it to use shape: the size of the plate and how far
+the edge is turned, because that is what I look at when I pick one up, and after
+that the bell. I expected the colour and the background to be noise. I also
+expected one class to fail. My five classes are five points on two scales, how
+large the plate is and how far its edge is turned, and a crash is in the middle
+of both: it is a plain, mostly flat plate, bigger than a splash and lighter than
+a ride, so a model that reads those two scales has to put a crash in the middle
+of them and answer \texttt{splash\_cymbal} or \texttt{ride\_cymbal} for one.
+
+That is what happened, so the guess was right. In the run I published, of the
+10 crash images in its 64-image test set 3 came out right and 5 were called
+\texttt{splash\_cymbal} (\texttt{outputs/report\_numbers.txt}). On the 25 new
+photographs it never once answered \texttt{crash\_cymbal} for anything, and the
+5 crash photographs came out 0 right, 1 \texttt{china\_cymbal},
+1 \texttt{hihat\_cymbal} and 3 \texttt{ride\_cymbal}
+(\texttt{outputs/check.txt}); three of the five mistakes it was most sure about
+are those crashes, at 75\%, 71\% and 50\% confidence. Problem 7 says why the
+first half of the guess was wrong as well: the size of the plate and its turned
+edge are not what it reads, it reads the middle of the frame first.
 
 \subsection*{Images per category}
-\fillin{How many images you got for each category.}
+
+I asked the downloader for 120 images in each class. The middle column is what
+it saved, and what \texttt{src/run.py} printed when it read the folder: for two
+of the classes the search pages ran out before the 120th image. The right column
+is what \texttt{src/clean.py count} left after cleaning, which Problem 4
+describes.
+
+\begin{center}\footnotesize
+\begin{tabular}{lrr}
+\toprule
+class & images read by \texttt{run.py} & kept after cleaning \\
+\midrule
+\texttt{china\_cymbal}  & 82 & 70 \\
+\texttt{crash\_cymbal}  & 60 & 51 \\
+\texttt{hihat\_cymbal}  & 86 & 75 \\
+\texttt{ride\_cymbal}   & 55 & 52 \\
+\texttt{splash\_cymbal} & 80 & 76 \\
+\midrule
+all                     & 363 & 324 \\
+\bottomrule
+\end{tabular}
+\end{center}
 
 % ---------------------------------------------------------------------------
 \section*{Problem 2. Preparing an image}
 
-\sidebyside{figures/prepare_original.jpg}{\fillin{the image as downloaded}}
-           {figures/prepare_result.png}{\fillin{what prepare\_image made of it}}
+\sidebyside{figures/prepare_original.jpg}{\texttt{data/clean/splash\_cymbal/%
+0001.jpg} as downloaded, $2018 \times 849$}
+{figures/prepare_result.png}{the $224 \times 224$ that \texttt{prepare\_image}
+returns, put back into ordinary colours}
 
-\fillin{What was cut off, and an image where the crop cut off part of the
-thing you care about.}
+\texttt{prepare\_image} keeps the shape and takes the shorter side to 256, so
+this photo becomes $608 \times 256$, and then cuts the middle $224 \times 224$
+out of it at $(192, 16)$. That throws away 192 pixels on the left, 192 on the
+right, 16 at the top and 16 at the bottom: 32.2\% of the pixels the resize
+left. In this photograph the whole cymbal is spread across the width of the
+frame, so the left and the right edge of the cymbal are both outside the crop,
+and what the model sees is the middle of the cymbal and the printing on it, not
+the rim that would show how big it is. The red box below is that crop, drawn
+back onto the photo as downloaded.
+
+\begin{center}\picturefile[0.9\linewidth]{figures/prepare_crop_box.jpg}\end{center}
+
+\texttt{ride\_cymbal/003.png} is the second image where this happens, and it is
+one of the images from a new source in Problem 5. The cymbal fills the frame,
+so the crop keeps the middle of it, the bell, the mounting nut and the printing,
+and the rim, which is what tells a ride from a crash for me, is outside it. The
+model answered \texttt{hihat\_cymbal} 86\%, the mistake it was most sure about
+of all 25 new images.
+
+\begin{center}\picturefile[0.55\linewidth]{figures/mistake_1.png}\end{center}
+
+The two pictures above and the numbers in this paragraph come from
+\texttt{src/report\_assets.py}. It prepares the same photo twice: once with
+\texttt{prepare\_image}, and once with the steps \texttt{src/check.py} writes
+again from \texttt{docs/model.json} for the web page. The two differ by
+0.00000000, and \texttt{check.py} reports that the exported model agrees with
+Python's answers (largest gap 0.0000), so the badge on the demo page is green.
 
 % ---------------------------------------------------------------------------
 \section*{Problem 3. First training runs}
+
+Every row below is the line \texttt{run.py} printed at the end of that run,
+copied with nothing changed. The whole output of each run is in \texttt{outputs/}.
 
 \begin{center}\footnotesize
 \begin{tabular}{llllrrrr}
 \toprule
 tag & start & trained & epochs & lr & trainable parameters & train acc. & test acc. \\
 \midrule
-\multicolumn{8}{l}{\fillin{one row per run, as run.py printed it}} \\
+run     & ImageNet & all layers & 10 & 0.0001 & 11,179,077 & 100.0\% & 62.5\% \\
+scratch & random   & all layers & 10 & 0.0001 & 11,179,077 &  71.1\% & 37.5\% \\
+frozen  & ImageNet & last layer & 10 & 0.001  &      2,565 &  75.3\% & 52.8\% \\
+custom  & ImageNet & all layers & 15 & 0.0005 & 11,179,077 &  90.7\% & 50.0\% \\
+clean   & ImageNet & all layers & 10 & 0.0001 & 11,179,077 &  99.2\% & 54.7\% \\
 \bottomrule
 \end{tabular}
 \end{center}
 
+\texttt{run} is the defaults, \texttt{scratch} is the same thing from random
+numbers, \texttt{frozen} trains only the new last layer, and \texttt{custom} is
+the setting I chose: 15 epochs at $5 \times 10^{-4}$ instead of the default 10
+epochs at $1 \times 10^{-4}$. The last row is the run after cleaning, which
+Problem 4 describes.
+
 \picturefile{figures/run_curves.png}
 
-\fillin{Did the loss go down? Did it keep going down, or flatten out?}
+The training loss falls from 1.3620 in epoch 1 to 0.0240 in epoch 10, and from
+epoch 6 on it stays under 0.06: it flattens out. The test loss falls from 1.2723
+to 1.1199 by epoch 5 and then climbs back to 1.2148, and the test accuracy
+wanders between 58.3\% and 63.9\% after epoch 3, so it stopped improving long
+before the training loss did.
 
-\fillin{The gap between train and test accuracy, and what it means.}
+The gap is 37.5 points: train accuracy is 100.0\% and test accuracy is 62.5\%.
+With 291 training images the model can memorise them all, and the train loss
+going down while the test loss goes up is what that memorising looks like.
 
 \begin{center}\picturefile[0.5\linewidth]{figures/run_confusion.png}\end{center}
 
-\fillin{Which two categories it mixes up most, and whether that surprised you.}
+Measured again by \texttt{src/report\_assets.py}, the model gets 45 of the 72
+test images right. The two it mixes up most are \texttt{crash\_cymbal} and
+\texttt{ride\_cymbal}: 5 crashes are called rides and 3 rides are called
+crashes. It also calls 3 splashes rides and 3 chinas hihats. The worst class is
+\texttt{ride\_cymbal}, where only 5 of 11 are right, and the best is
+\texttt{hihat\_cymbal} with 15 of 17.
 
-\fillin{How far apart the test accuracies are, starting from ImageNet and from
-random numbers, and why you think that is.}
+Starting from ImageNet weights is worth 25.0 points here: 62.5\% against 37.5\%
+from random numbers. The random model put 48 of the 72 test images into
+\texttt{china\_cymbal} and never once answered \texttt{ride\_cymbal} or
+\texttt{splash\_cymbal}, so with only 291 training images it learned the biggest
+class and little else.
 
-\fillin{How close training only the last layer gets to training all of them.}
+Training only the last layer comes close: 52.8\% against 62.5\%, 9.7 points
+behind, with 2,565 of the 11,179,077 weights trainable and 0.8 minutes against
+3.8. The ImageNet features already separate most cymbals, and the last layer on
+its own is enough for 52.8\%. It leans on the same mistake, calling 5 crashes
+rides, and adds its own: 4 splashes called crashes.
+
+My longer run went the other way: 15 epochs at $5 \times 10^{-4}$ finished at
+50.0\%, 12.5 points below the 10-epoch default, and it leaned on
+\texttt{ride\_cymbal}, where it put 29 of the 72 test images and got only 7 of
+the rides right. Training longer at a bigger step did not help.
+
+\subsection*{The other runs}
+\sidebyside{figures/scratch_curves.png}{scratch, from random numbers}
+           {figures/frozen_curves.png}{frozen, last layer only}
+\sidebyside{figures/custom_curves.png}{custom, 15 epochs at $5 \times 10^{-4}$}
+           {figures/clean_curves.png}{clean, the run after cleaning (Problem 4)}
+\sidebyside{figures/scratch_confusion.png}{\texttt{scratch}}
+           {figures/frozen_confusion.png}{\texttt{frozen}}
+\sidebyside{figures/custom_confusion.png}{\texttt{custom}}
+           {figures/clean_confusion.png}{\texttt{clean}}
 
 \subsection*{Output of the runs}
 \outputfile{outputs/run_output.txt}
 \outputfile{outputs/scratch_output.txt}
 \outputfile{outputs/frozen_output.txt}
-% One more line like these for the setting you chose, named by its tag.
-\fillin{the output of the run with your own setting}
+\outputfile{outputs/custom_output.txt}
+\outputfile{outputs/clean_output.txt}
 
 % ---------------------------------------------------------------------------
 \section*{Problem 4. Cleaning}
 
 \subsection*{My rule}
-\fillin{Your rule, in one or two sentences, as you wrote it before you
-started.}
+
+I kept a downloaded image only if it is an ordinary photograph of one whole
+cymbal of that class: not wrapped in anything, not a close-up so tight that the
+shape cannot be seen, and not a picture whose subject I cannot identify as a
+cymbal at all. A photograph may appear only once. If the same photo, or a near
+copy of it, had come back more than once, I kept one of them, the copy whose
+class the photo really shows when the copies were in different classes, and
+removed the others. The reasons recorded in \texttt{data/removed/log.csv} are
+this rule written out one image at a time.
 
 \subsection*{Three kinds of junk}
-\fillin{Three kinds of junk, with one picture of each.}
 
-% For example: \picturefile[0.3\linewidth]{figures/junk_1.jpg}
+All 39 images I removed fall into three kinds. The pictures are the removed
+files themselves, from \texttt{data/removed/}.
+
+\sidebyside{figures/junk_1_different_class.jpg}{\texttt{china\_cymbal/0009.jpg}:
+one \texttt{splash\_cymbal} product photo that the search also saved as
+\texttt{china\_cymbal}, \texttt{crash\_cymbal} and \texttt{hihat\_cymbal} (7
+images, 7 in all)}
+{figures/junk_2_copy_same_class.jpg}{\texttt{china\_cymbal/0062.jpg}: a near
+copy of \texttt{china\_cymbal/0015.jpg} in the same class (29 images)}
+
+\begin{center}\picturefile[0.45\linewidth]{figures/junk_3_rule.jpg}\end{center}
+
+\texttt{china\_cymbal/0048.jpg}: a cymbal wrapped in plastic, with the shape
+barely visible. This is the third kind, images that break my rule: one extreme
+close-up, one photo whose object is not identifiable as a cymbal, and this one.
+Three images in all.
 
 \subsection*{What I removed}
 \outputfile{outputs/clean_count.txt}
 
-\fillin{How many near copies it found, and what you did with them.}
+So 39 of the 363 images went to \texttt{data/removed/}: 36 duplicates and 3 that
+break the rule, and 324 were left for training.
 
-\fillin{Of the first 20 suspects in each class, how many you removed. Whether
-the suspects included junk you had missed, and whether you found junk it did
-not list.}
+\subsection*{The near copies}
+
+The suspect search before cleaning listed 47 pairs of near copies
+(\texttt{results/cleaning/suspects\_before/suspects.csv}). Every one of the 47
+pairs lost at least one of its two files: in 33 pairs one of the two went, in 14
+pairs both went, in none did both stay. It cannot print what it found with
+\texttt{suspects.csv} alone, so the pair rows at the end of the file are listed
+in \texttt{outputs/report\_numbers.txt} with, for each pair, which of the two I
+removed. 20 of the removals record how alike the two were, from 0.9516 to
+0.9998. After cleaning I ran the same search again and it found no near copies
+left, and the agreement between the label and the rest of the data, which was
+59.2\% over 363 images, is 57.4\% over 324. Read that as: the copy that stayed is
+still a little unusual, but the copy itself is gone.
+
+\outputfile{outputs/suspects.txt}
+\outputfile{outputs/suspects_after.txt}
+
+\subsection*{The first 20 suspects in each class}
+
+\begin{center}\footnotesize
+\begin{tabular}{lrrr}
+\toprule
+class & in the first 20 & removed & kept \\
+\midrule
+\texttt{china\_cymbal}  & 20 & 4 & 16 \\
+\texttt{crash\_cymbal}  & 20 & 3 & 17 \\
+\texttt{hihat\_cymbal}  & 20 & 2 & 18 \\
+\texttt{ride\_cymbal}   & 20 & 0 & 20 \\
+\texttt{splash\_cymbal} & 20 & 0 & 20 \\
+\midrule
+all five                & 100 & 9 & 91 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Of the first 20 suspects in each class I removed 9 of the 100. They are
+\texttt{china\_cymbal} ranks 3, 6, 9 and 20, \texttt{crash\_cymbal} ranks 9, 18
+and 20, and \texttt{hihat\_cymbal} ranks 4 and 14; the \texttt{ride\_cymbal} and
+\texttt{splash\_cymbal} lists held nothing I wanted to remove, which is what
+that list is for: it shows the images that look least like the rest of their
+class, and many of those are good pictures that are only unusual. All three
+images that break my rule are in the \texttt{china\_cymbal} list, at ranks 3, 6
+and 9, and the rest are copies, which is the kind of junk I did not find by
+looking at 363 images one by one and the reason the search is worth running.
 
 \subsection*{Before and after cleaning}
 \outputfile{outputs/compare.txt}
 
-\fillin{The test accuracy and the accuracy on your new images, before and
-after. If a number went down, why you think it did.}
+On the 25 new images, which cleaning does not touch at all, the same two saved
+models go from 36.0\% to 52.0\%: cleaning is worth 16.0 points there, and that is
+the one fair comparison in this section. The test accuracy goes from 62.5\% to
+54.7\%, but the two numbers are measured on different test sets: the first run
+tested on 72 images and 7 of those 72 are in \texttt{data/removed/} now, and the
+cleaned test set of 64 images has no near copies left in it, which makes it the
+harder set of the two. The cleaned model also learns its training set less
+exactly, 99.2\% against 100.0\%, now that the copies that made it easy are gone.
+
+\picturefile{figures/clean_worst.png}
+
+The ten mistakes the cleaned model was most sure about, on its own test set, with
+what the model said printed on each picture (\texttt{src/evaluate.py} draws it).
+The worst is a splash it called \texttt{hihat\_cymbal} with 98\%, then two rides it
+called \texttt{crash\_cymbal} with 97\% and 94\%, and a splash and a crash it
+called \texttt{ride\_cymbal} with 79\% and 76\%.
 
 % ---------------------------------------------------------------------------
 \section*{Problem 5. Images from a new source}
 
-\fillin{Where your new images came from, and why you are sure none of them are
-among your downloads.}
+The 25 images came from two places, and neither of them is the search the
+download worked from. Four images in each class are the product photographs the
+makers and the shops publish of the exact models I play, saved one at a time
+from their own pages, and the fifth is my own photograph of the cymbal in front
+of me, taken with my phone in the rehearsal room (1050 by 1400 pixels, or 1050
+by 564 for one china). None of them is in the download: the overlap check
+compares all 25 with all 363 downloaded images and finds no near copy, and the
+closest any of them comes is 0.89, where a near copy counts above 0.95.
+
+Five images for each class, 25 in all, in \texttt{data/new\_images/}, saved as
+JPEG and PNG. The overlap check compares all 25 with all 363 downloads.
 
 \outputfile{outputs/overlap.txt}
 
-\fillin{The accuracy on your downloaded test set and on your new images, side
-by side.}
+The same 25 images are also the only fair way to compare the model before and
+after cleaning, because cleaning never touches them:
 
-\fillin{Five mistakes it was confident about, with the pictures. For each one,
-what in the image you think pushed it the wrong way.}
+\begin{center}\footnotesize
+\begin{tabular}{lrr}
+\toprule
+run & downloaded test set & the 25 new images \\
+\midrule
+run, before cleaning    & 62.5\% (72 images) & 36.0\% (9 of 25) \\
+clean, after cleaning   & 54.7\% (64 images) & 52.0\% (13 of 25) \\
+\bottomrule
+\end{tabular}
+\end{center}
 
-\fillin{What is different about your new images: background, lighting, angle,
-distance, what else is in the frame.}
+Both rows are what \texttt{check.py --compare run clean} printed, in
+\texttt{outputs/compare.txt}. On my own images the model gains 16.0 points from
+cleaning. On the downloaded test set the number looks 7.8 points worse, but
+that set is not the same set any more, as Problem 4 explains.
+
+\subsection*{The five mistakes it was most sure about}
+
+These are the five printed at the end of \texttt{outputs/check.txt}, measured by
+check.py on the exported model. \texttt{src/report\_assets.py} found the same
+five, and copied the pictures out of \texttt{data/new\_images/}.
+
+\sidebyside{figures/mistake_1.png}{\texttt{ride\_cymbal/003.png}: said
+\texttt{hihat\_cymbal} (86\%)}
+{figures/mistake_2.png}{\texttt{crash\_cymbal/003.png}: said
+\texttt{hihat\_cymbal} (75\%)}
+
+\sidebyside{figures/mistake_3.png}{\texttt{crash\_cymbal/001.png}: said
+\texttt{ride\_cymbal} (71\%)}
+{figures/mistake_4.jpg}{\texttt{crash\_cymbal/005.jpg}: said
+\texttt{ride\_cymbal} (50\%)}
+
+\begin{center}\picturefile[0.5\linewidth]{figures/mistake_5.jpg}\end{center}
+
+\texttt{splash\_cymbal/005.jpg}: said \texttt{china\_cymbal} (50\%).
+
+\begin{itemize}
+\item \texttt{ride\_cymbal/003.png}: a Paiste Monad Dry Heavy Ride of 22 inches,
+photographed from above so that the cymbal fills the picture. The frame cuts
+the rim off all around it, so the square the model gets holds the bell, the
+mounting nut and the large printing, on a dark background with a piece of the
+kit at the lower left. The cymbal is purple, and I have no purple cymbal in my
+downloads.
+\item \texttt{crash\_cymbal/003.png}: a Sabian SBR cymbal from above, with a
+black felt, the wing nut and the stand through the middle. The cymbal again
+fills the frame and its edge is outside the picture, and the \texttt{SABIAN}
+printing is in the middle of the square, on a blurred room.
+\item \texttt{crash\_cymbal/001.png}: a very small copy of the same Sabian XHH
+cymbal, 169 by 102 pixels, the smallest file I collected. It shows only the
+middle of the cymbal: the hole, the red plastic sleeve on the stand and the
+\texttt{XHH} printing.
+\item \texttt{crash\_cymbal/005.jpg}: a Meinl HCS 16" crash, photographed from
+directly above on the kit. The cymbal fills the picture, its rim is cut by the
+frame at the top and the bottom, and other parts of the kit (a stand, another
+cymbal, a drum) are at the edges. The answer was a 50/50 one, so this is a
+mistake it was barely sure about.
+\item \texttt{splash\_cymbal/005.jpg}: an Istanbul Agop XIST 10" Brilliant
+Splash on its stand in a rehearsal room, from above, with the floor, a stand
+and a case around it. The whole cymbal is inside the frame here, and the answer
+was 50/50 again.
+\end{itemize}
+
+Two of the five were called \texttt{hihat\_cymbal} and two \texttt{ride\_cymbal};
+the fifth was called \texttt{china\_cymbal}. In all five the square holds the
+middle of the cymbal and not its rim, and in three of them the cymbal is
+mounted with the stand through the middle of the frame.
+
+\subsection*{What is different about these images}
+
+\begin{itemize}
+\item The cymbals are mounted. Every one of these five is a cymbal on a kit or
+on a stand, and the mount is in the middle of the frame: a felt, a wing nut, a
+clutch, a red plastic sleeve. In my downloads the cymbal is usually off the
+kit or on a plain stand, so nothing is through the middle of it.
+\item The room is in the picture: a wooden wall, a blue wall, a floor, cables,
+mic stands, a case, other cymbals and drums. My downloads are almost all
+catalogue photos, with the cymbal alone on white or on black.
+\item The camera is close and high. From directly above or from the side, at
+arm's length, the cymbal fills the frame and the camera cuts its rim off. The
+224 square then holds the middle of the cymbal, the bell, the mount and the
+printing, while the outline and the size, which the catalogue photos show
+whole, are outside it.
+\item The light is indoor and uneven, with one strong reflection across the
+metal, while the catalogue photos are lit evenly from the front.
+\item The files themselves are a mixture: the PNGs run from 169 by 102 to 1360
+by 535 pixels, four of the five JPEGs are 1050 by 1400, and
+\texttt{china\_cymbal/005.jpg} is 1050 by 564.
+\end{itemize}
 
 % ---------------------------------------------------------------------------
 \section*{Problem 6. The demo}
 
-Address: \fillin{your GitHub Pages address}
+Address: \url{https://gyuhwa2007-cloud.github.io/mas1004-assignment1/}
 
-\fillin{What happens when you show it something that is none of your
-categories.}
+The page serves the cleaned model (\texttt{python src/export\_web.py --tag
+clean}). Its three files, \texttt{docs/model.onnx} (44.8 MB),
+\texttt{docs/model.json} and \texttt{docs/selftest.json}, are committed in the
+repository and GitHub Pages publishes the \texttt{docs/} folder of the
+\texttt{main} branch, so the address works without this computer. The badge at
+the top is green: \texttt{check.py} reports that the exported model agrees with
+Python's answers, with a largest gap of 0.0000, and in
+\texttt{src/report\_assets.py} the web page's pipeline and
+\texttt{prepare\_image} differ by 0.00000000.
+
+One thing to read carefully there: what those two measurements compare is the
+crop, the arithmetic and the network on a picture that is already 256 pixels
+wide, which is what the three self test pictures are (\texttt{selftest\_picture}
+in \texttt{src/export\_web.py}). The page shrinks a photograph you give it
+itself, in JavaScript, by halving it step by step and letting the browser smooth
+each step (\texttt{docs/app.js}), which lands close to the single bilinear
+resize \texttt{prepare\_image} does but not on the same numbers. So the
+percentages this report quotes are the ones Python printed, and the percentages
+the page shows for a full-size photograph are its own; the class it answers is
+the same one, unless two classes are almost tied.
+
+The page has no `none of these' row: it always shows its five classes with a
+percentage each, so something that is none of them still comes back as one of
+them. Shown a photograph of a parked bicycle it answered \texttt{hihat\_cymbal}
+42.6\%, and given a second bicycle it answered \texttt{hihat\_cymbal} 79.1\% and
+was sure of it. Both numbers are in \texttt{outputs/problem7.txt}, measured on
+the exported model through the same pipeline the page runs
+(\texttt{src/problem7.py}), and both bicycles are Wikimedia Commons photographs
+(CC BY 2.0 and CC BY-SA 4.0).
+
+\sidebyside{figures/none_bicycle_1.jpg}{a bicycle under a street lamp, none of
+my classes: the page says \texttt{hihat\_cymbal} 42.6\%}
+{figures/none_bicycle_2.jpg}{a bicycle in Rome, none of my classes: the page
+says \texttt{hihat\_cymbal} 79.1\%}
 
 % ---------------------------------------------------------------------------
 \section*{Problem 7. What the model looks at}
 
-% Copy this subsection once for every guess.
-\subsection*{Guess 1}
+\subsection*{Guess 1: the model reads the name printed on the cymbal}
 
-\fillin{The guess, and what in your images or your model's mistakes made you
-think of it.}
+My guess, from the china that came back wrong on the page: the model reads the
+name of the type printed on the metal. In the china image that failed the
+printing is large and lies differently from the other images, so I covered it
+and tried the same image again.
 
-\fillin{The change you chose, and why it tests the guess.}
+The change: a grey box over the printing, at the same place in the $224 \times
+224$ square the model gets from every photograph (the boxes are fractions of
+that square, so they land on the same part of the cymbal in each image). If the
+printed name is what the model reads, the answer should move when it is covered;
+if the answer does not move, the name is not what it uses.
 
-My request to the agent, word for word:
+My request to the agent, word for word (my own words for this experiment, from
+my short report):
 \begin{quote}
-\fillin{the request}
+“종류 이름이 나와 있는 문구를 가리고 테스트하였다.” --- ``I covered the
+writing that shows the name of the type, and tested it again.''
 \end{quote}
 
-% One \sidebyside for every image you changed.
-\sidebyside{figures/guess1_original_1.jpg}{\fillin{original: the model's answer}}
-           {figures/guess1_changed_1.jpg}{\fillin{changed: the model's answer}}
+\sidebyside{figures/photo_1.jpg}{\texttt{china\_cymbal/003.png} as it is:
+\texttt{china\_cymbal} 48.6\%}
+{figures/guess1_changed_1.jpg}{printing covered:
+\texttt{ride\_cymbal} 32.8\%, \texttt{china\_cymbal} 30.8\%}
 
-\fillin{What the results say about the guess.}
+\sidebyside{figures/photo_2.jpg}{\texttt{crash\_cymbal/003.png} as it is:
+\texttt{hihat\_cymbal} 75.2\%}
+{figures/guess1_changed_2.jpg}{printing covered: \texttt{hihat\_cymbal} 76.3\%}
+
+\sidebyside{figures/photo_3.jpg}{\texttt{splash\_cymbal/005.jpg} as it is:
+\texttt{china\_cymbal} 50.3\%}
+{figures/guess1_changed_3.jpg}{printing covered: \texttt{china\_cymbal} 47.8\%}
+
+\sidebyside{figures/photo_4.jpg}{\texttt{hihat\_cymbal/005.jpg} as it is:
+\texttt{hihat\_cymbal} 86.3\%}
+{figures/guess1_changed_4.jpg}{printing covered: \texttt{hihat\_cymbal} 78.7\%}
+
+\begin{center}\footnotesize
+\begin{tabular}{llrr}
+\toprule
+photo & really & before & after \\
+\midrule
+1 & \texttt{china\_cymbal/003.png}  & \texttt{china} 48.6\% & \texttt{ride} 32.8\% \\
+2 & \texttt{crash\_cymbal/003.png}  & \texttt{hihat} 75.2\% & \texttt{hihat} 76.3\% \\
+3 & \texttt{splash\_cymbal/005.jpg} & \texttt{china} 50.3\% & \texttt{china} 47.8\% \\
+4 & \texttt{hihat\_cymbal/005.jpg}  & \texttt{hihat} 86.3\% & \texttt{hihat} 78.7\% \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+What the results say: on the china the cover moved the answer, from
+\texttt{china\_cymbal} 48.6\% to \texttt{ride\_cymbal} 32.8\% with the china just
+behind at 30.8\%, so the printing carries a large part of that answer and the
+new answer is a near tie. On the other three photographs nothing moved: the
+hihat lost 7.6 points and stayed the answer, and both mistakes stayed exactly
+where they were, a crash still called \texttt{hihat\_cymbal} 76.3\% and a splash
+still called \texttt{china\_cymbal} 47.8\%. One photograph out of four is not a
+rule, so the guess is too strong: the model reads the printing sometimes, and
+something else decides the other three.
+
+\subsection*{Guess 2: the model uses the bell and the mount in the middle of the
+frame}
+
+My guess, from the hihat and the ride in my short report: what the model uses is
+what is holding the cymbal, in the middle of the picture. A hihat, unlike the
+others, is fixed to a particular stand, and a hihat away from its stand had much
+lower accuracy; a ride is recognised by its large, clear bell, and the rides
+without one fall behind. Covering the bell and the mount should then move the
+answer more than anything else I try.
+
+The change: one grey box over the middle of the $224 \times 224$ square, so that
+it covers the bell, the mounting nut and the clutch or felt of the stand, on
+five photographs.
+
+My request to the agent, word for word (my own words for this experiment, from
+my short report):
+\begin{quote}
+“하이햇은 다른 심벌들과 달리 특정 스탠드와 함께 붙어있는 큰 특징을 가지기.
+따라서 스탠드 없이 있는 하이햇을 가져다 두었을 때에는 현저히 낮은 정확도를
+보여주었다.” --- ``A hihat, unlike the other cymbals, has the big feature of
+being fixed to a particular stand, so a hihat that is not on a stand had much
+lower accuracy.''
+
+“라이드 심벌은 모델이 특징으로 크기가 크고 뚜렷한 벨로 잡았다.” --- ``The
+model takes the large, clear bell of a ride as its feature.''
+\end{quote}
+
+\sidebyside{figures/photo_1.jpg}{\texttt{china\_cymbal/003.png} as it is:
+\texttt{china\_cymbal} 48.6\%}
+{figures/guess2_changed_1.jpg}{bell and mount covered:
+\texttt{splash\_cymbal} 35.8\%}
+
+\sidebyside{figures/photo_2.jpg}{\texttt{crash\_cymbal/003.png} as it is:
+\texttt{hihat\_cymbal} 75.2\%}
+{figures/guess2_changed_2.jpg}{bell and mount covered:
+\texttt{ride\_cymbal} 40.1\%}
+
+\sidebyside{figures/photo_3.jpg}{\texttt{splash\_cymbal/005.jpg} as it is:
+\texttt{china\_cymbal} 50.3\%}
+{figures/guess2_changed_3.jpg}{bell and mount covered:
+\texttt{china\_cymbal} 45.6\%}
+
+\sidebyside{figures/photo_4.jpg}{\texttt{hihat\_cymbal/005.jpg} as it is:
+\texttt{hihat\_cymbal} 86.3\%}
+{figures/guess2_changed_4.jpg}{bell and mount covered:
+\texttt{hihat\_cymbal} 45.5\%}
+
+\sidebyside{figures/photo_5.jpg}{\texttt{ride\_cymbal/003.png} as it is:
+\texttt{hihat\_cymbal} 85.8\%, the ride itself 3.8\%}
+{figures/guess2_changed_5.jpg}{bell and mount covered:
+\texttt{hihat\_cymbal} 33.3\%, the ride 18.9\%}
+
+\begin{center}\footnotesize
+\begin{tabular}{llrr}
+\toprule
+photo & really & before & after \\
+\midrule
+1 & \texttt{china\_cymbal/003.png}  & \texttt{china} 48.6\% & \texttt{splash} 35.8\% \\
+2 & \texttt{crash\_cymbal/003.png}  & \texttt{hihat} 75.2\% & \texttt{ride} 40.1\% \\
+3 & \texttt{splash\_cymbal/005.jpg} & \texttt{china} 50.3\% & \texttt{china} 45.6\% \\
+4 & \texttt{hihat\_cymbal/005.jpg}  & \texttt{hihat} 86.3\% & \texttt{hihat} 45.5\% \\
+5 & \texttt{ride\_cymbal/003.png}   & \texttt{hihat} 85.8\% & \texttt{hihat} 33.3\% \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+What the results say: this is the change that matters. Two of the five answers
+moved to another class, the china to \texttt{splash\_cymbal} 35.8\% and the
+crash it had called a hihat to \texttt{ride\_cymbal} 40.1\%, and the two
+photographs it had right lost more than half of their confidence, the hihat
+going from 86.3\% to 45.5\% and the wrong \texttt{hihat\_cymbal} on the ride
+from 85.8\% to 33.3\%. On that ride the cymbal's own class rose from 3.8\% to
+18.9\% the moment the middle of the frame was covered, so what made the model
+answer hihat about a ride was the bell and the mounting hardware, not the plate.
+Covering the middle cost the model every answer it had and gave it no better
+one. My hihat and ride guesses were right about what the model looks at, and
+wrong about the rest of the cymbal not mattering: the model leans on the middle
+of the frame more than on anything else.
+
+\subsection*{Guess 3: the frame cuts the turned edge off, and that is the
+problem}
+
+My guess, from the china again: the model uses how far the edge of a china is
+turned back, and the reason it fails is that the cymbal is photographed so close
+that the edge, and with it the shape, are outside the square the model sees. My
+short report put it this way:
+
+\begin{quote}
+“차이나 심벌들의 이미지를 보면 가장자리의 거꾸로 꺾인 정도가 심할수록 더 높은
+확률을 가진다는 것을 알 수 있다. ... 그러나 모델이 보는 이미지가 확대되어
+가장자리가 잘 안 보인다. 따라서 너무 확대된 사진을 본다는 이유로 잘못된 결과를
+낸다고 볼 수 있다.” --- ``Looking at the china images, the more sharply the edge
+is turned back the higher the probability, so the model reads that turned edge.
+But the edge cannot be seen well because the image the model sees is zoomed in,
+so the wrong answer can be put down to it seeing a photograph that is too zoomed
+in.''
+\end{quote}
+
+The change: shrink each photograph onto a grey margin, so that the whole cymbal,
+edge and outline included, fits inside the $224 \times 224$ square with the
+cymbal smaller than it was. If the missing edge is the problem, the mistakes
+should go away.
+
+\sidebyside{figures/photo_1.jpg}{\texttt{china\_cymbal/003.png} as it is:
+\texttt{china\_cymbal} 48.6\%}
+{figures/guess3_changed_1.jpg}{whole china on a grey margin:
+\texttt{splash\_cymbal} 49.3\%}
+
+\sidebyside{figures/photo_2.jpg}{\texttt{crash\_cymbal/003.png} as it is:
+\texttt{hihat\_cymbal} 75.2\%}
+{figures/guess3_changed_2.jpg}{whole crash on a grey margin:
+\texttt{hihat\_cymbal} 86.8\%}
+
+\sidebyside{figures/photo_3.jpg}{\texttt{splash\_cymbal/005.jpg} as it is:
+\texttt{china\_cymbal} 50.3\%}
+{figures/guess3_changed_3.jpg}{whole splash on a grey margin:
+\texttt{china\_cymbal} 32.0\%}
+
+\sidebyside{figures/photo_4.jpg}{\texttt{hihat\_cymbal/005.jpg} as it is:
+\texttt{hihat\_cymbal} 86.3\%}
+{figures/guess3_changed_4.jpg}{whole hihat on a grey margin:
+\texttt{hihat\_cymbal} 81.9\%}
+
+\begin{center}\footnotesize
+\begin{tabular}{llrr}
+\toprule
+photo & really & before & after \\
+\midrule
+1 & \texttt{china\_cymbal/003.png}  & \texttt{china} 48.6\% & \texttt{splash} 49.3\% \\
+2 & \texttt{crash\_cymbal/003.png}  & \texttt{hihat} 75.2\% & \texttt{hihat} 86.8\% \\
+3 & \texttt{splash\_cymbal/005.jpg} & \texttt{china} 50.3\% & \texttt{china} 32.0\% \\
+4 & \texttt{hihat\_cymbal/005.jpg}  & \texttt{hihat} 86.3\% & \texttt{hihat} 81.9\% \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+What the results say: showing the model the whole cymbal fixed nothing. The
+crash it had called a hihat was called a hihat even more strongly, 86.8\%, and
+the china left its own class for \texttt{splash\_cymbal} 49.3\%. A splash stayed
+\texttt{china\_cymbal} 32.0\% with \texttt{hihat\_cymbal} 28.2\% close behind, so
+it is still wrong but no longer sure of it. Not one of the four answers became
+right. So the turned edge and the missing outline are not what the model is
+reading: if they were, giving it the whole cymbal would have helped, and it hurt
+instead.
 
 \subsection*{What I now think the model uses}
-\fillin{What you now think the model uses to tell your categories apart, and
-how sure you are.}
+
+\begin{itemize}
+\item The middle of the frame first of all, whatever is in it: the bell, the
+mounting nut, the clutch, the felt, the stand. Covering that one place (Guess 2)
+is the only change that moved two answers to another class and halved the
+confidence of the rest, and on the ride photograph it was the difference between
+\texttt{hihat\_cymbal} 85.8\% and \texttt{ride\_cymbal} 18.9\%.
+\item A hihat is the class it can do: 5 of 5 new images right, the only class it
+never misses, and the class it answers when it is shown a bicycle (79.1\%) or a
+ride from above (85.8\%).
+\item A ride is thin evidence: 2 of 5, the rest called \texttt{hihat\_cymbal}
+twice and \texttt{china\_cymbal} once. On the ride I covered, the cymbal's own
+class went from 3.8\% to 18.9\% when the middle of the frame was hidden, so a
+large, clear bell is not enough on its own.
+\item A crash is the worst: 0 of 5, called \texttt{ride\_cymbal} three times.
+What my short report said about the crash survives: it is the class with no big
+feature of its own, so it is answered with whatever feature the model does see,
+here the bell and the mounting hardware of other classes.
+\item The printing on the metal counts, sometimes: covering it moved 1 of the 4
+photographs, and it moved that one to \texttt{ride\_cymbal}, which is not the
+name printed on the china.
+\item The turned edge of a china, which I thought was the feature, is not what
+the model needs: giving it the whole cymbal, edge included, made the mistakes
+worse.
+\end{itemize}
+
+How sure I am: the middle of the frame is the one thing the three changes agree
+about, and it is measured on five photographs, so I am confident about it. The
+printing rests on one photograph, so I am not confident about it at all.
+Everything above is measured on the 5 to 25 images I have, and no change is
+measured on more than five photographs.
+
+\subsection*{Output of the changes}
+\outputfile{outputs/problem7.txt}
 
 % ---------------------------------------------------------------------------
 \section*{Appendix. Output of check.py}
 \outputfile{outputs/check.txt}
+
+Every number in this report is one that a file in \texttt{outputs/} printed,
+or one that \texttt{src/report\_assets.py} printed into
+\texttt{outputs/report\_numbers.txt} while measuring the saved models again on
+the test sets they were trained on, or a difference between two of those
+numbers, or a percentage that \texttt{src/evaluate.py} printed on one of the
+figures in \texttt{figures/}. The pictures in \texttt{figures/} were
+copied out of \texttt{results/} by \texttt{src/report\_assets.py}, except the
+single-image ones, which it made from \texttt{data/clean/},
+\texttt{data/removed/} and \texttt{data/new\_images/}, and except the ones for
+Problem 7, which \texttt{src/problem7.py} made from \texttt{data/new\_images/}
+and from the changed copies it wrote into \texttt{data/changed/}. Nothing in
+\texttt{data/} was changed.
 
 \end{document}
